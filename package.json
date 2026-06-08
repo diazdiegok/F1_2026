@@ -1,0 +1,26 @@
+{
+  "name": "f1_2026",
+  "version": "1.0.0",
+  "description": "Tablero interactivo de la temporada Fórmula 1 2026. Campeonato de pilotos y constructores, resultados por carrera, comparativas de equipo y datos en vivo desde la API Jolpica/Ergast.",
+  "main": "app.js",
+  "scripts": {
+    "serve": "npx --yes serve -l 8080",
+    "capture": "node capture-screenshots.mjs",
+    "capture:destacadas": "node capture-screenshots.mjs --destacadas",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/diazdiegok/F1_2026.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/diazdiegok/F1_2026/issues"
+  },
+  "homepage": "https://github.com/diazdiegok/F1_2026#readme",
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
+}

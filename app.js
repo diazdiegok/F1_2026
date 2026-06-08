@@ -34,12 +34,12 @@ const OVERRIDE_RESULTS = {
       { position: "14", posNumber: 14, grid: 15, driverId: "colapinto", driverName: "Franco Colapinto", driverShort: "COL", teamId: "alpine", points: 0, fastestLap: false, time: "+48.910s", status: "Finished" },
       { position: "15", posNumber: 15, grid: 16, driverId: "perez", driverName: "Sergio Perez", driverShort: "PER", teamId: "cadillac", points: 0, fastestLap: false, time: "+51.212s", status: "Finished" },
       { position: "16", posNumber: 16, grid: 9, driverId: "sainz", driverName: "Carlos Sainz", driverShort: "SAI", teamId: "williams", points: 0, fastestLap: false, time: "+8 Laps", status: "Finished" },
-      { position: "NC", posNumber: 99, grid: 8, driverId: "leclerc", driverName: "Charles Leclerc", driverShort: "LEC", teamId: "ferrari", points: 0, fastestLap: false, time: "DNF", status: "DNF" },
-      { position: "NC", posNumber: 99, grid: 17, driverId: "stroll", driverName: "Lance Stroll", driverShort: "STR", teamId: "aston_martin", points: 0, fastestLap: false, time: "DNF", status: "DNF" },
-      { position: "NC", posNumber: 99, grid: 18, driverId: "norris", driverName: "Lando Norris", driverShort: "NOR", teamId: "mclaren", points: 0, fastestLap: false, time: "DNF", status: "DNF" },
-      { position: "NC", posNumber: 99, grid: 19, driverId: "bearman", driverName: "Oliver Bearman", driverShort: "BEA", teamId: "haas", points: 0, fastestLap: false, time: "DNF", status: "DNF" },
-      { position: "NC", posNumber: 99, grid: 20, driverId: "bottas", driverName: "Valtteri Bottas", driverShort: "BOT", teamId: "cadillac", points: 0, fastestLap: false, time: "DNF", status: "DNF" },
-      { position: "NC", posNumber: 99, grid: 21, driverId: "max_verstappen", driverName: "Max Verstappen", driverShort: "VER", teamId: "red_bull", points: 0, fastestLap: false, time: "DNF", status: "DNF" },
+      { position: "NC", posNumber: 99, grid: 8, driverId: "leclerc", driverName: "Charles Leclerc", driverShort: "LEC", teamId: "ferrari", points: 0, fastestLap: false, time: null, status: "DNF" },
+      { position: "NC", posNumber: 99, grid: 17, driverId: "stroll", driverName: "Lance Stroll", driverShort: "STR", teamId: "aston_martin", points: 0, fastestLap: false, time: null, status: "DNF" },
+      { position: "NC", posNumber: 99, grid: 18, driverId: "norris", driverName: "Lando Norris", driverShort: "NOR", teamId: "mclaren", points: 0, fastestLap: false, time: null, status: "DNF" },
+      { position: "NC", posNumber: 99, grid: 19, driverId: "bearman", driverName: "Oliver Bearman", driverShort: "BEA", teamId: "haas", points: 0, fastestLap: false, time: null, status: "DNF" },
+      { position: "NC", posNumber: 99, grid: 20, driverId: "bottas", driverName: "Valtteri Bottas", driverShort: "BOT", teamId: "cadillac", points: 0, fastestLap: false, time: null, status: "DNF" },
+      { position: "NC", posNumber: 99, grid: 21, driverId: "max_verstappen", driverName: "Max Verstappen", driverShort: "VER", teamId: "red_bull", points: 0, fastestLap: false, time: null, status: "DNF" },
     ],
     fastestLap: {
       driverId: "antonelli",
@@ -207,8 +207,8 @@ function getPartialWarningHtml(raceData) {
 
 function formatStatusLabel(status) {
   const labels = {
-    'Finished': 'Terminó',
-    'Lapped': 'Terminó a vueltas',
+    'Finished': 'Sin vueltas de dif.',
+    'Lapped': 'A vueltas',
     'Retired': 'Abandonó en carrera',
     'Did not start': 'No largó',
     'Disqualified': 'Descalificado',
@@ -240,7 +240,7 @@ function formatStatusLabel(status) {
   if (labels[status]) return labels[status];
   if (/^\+\d+ Laps?$/.test(status)) {
     const n = parseInt(status.match(/\d+/)[0], 10);
-    return `Terminó (+${n} ${n === 1 ? 'vuelta' : 'vueltas'})`;
+    return `A vueltas (+${n})`;
   }
   return status;
 }
@@ -253,9 +253,15 @@ function getStatusLabelClass(status) {
 }
 
 function formatResultTime(time, status) {
+  if (!isClassifiedFinish(status)) return '—';
   const rawStatuses = new Set(['DNF', 'Retired', 'Lapped', 'Finished', 'Did not start', 'Disqualified', 'DNS', 'DSQ']);
-  if (!time || rawStatuses.has(time)) return formatStatusLabel(status || time);
+  if (!time || rawStatuses.has(time)) return '—';
   return time;
+}
+
+function formatResultTimeOrStatus(time, status) {
+  const t = formatResultTime(time, status);
+  return t === '—' ? formatStatusLabel(status) : t;
 }
 
 // ─── DATA LOADING FROM JOLPICA API ──────────────────────────────────────────
@@ -342,7 +348,7 @@ async function loadF1Data() {
           teamId: tId,
           points: parseFloat(res.points),
           fastestLap: false, // will update below
-          time: res.Time?.time ? formatRaceTime(res.position, res.Time.time) : formatStatusLabel(res.status),
+          time: res.Time?.time ? formatRaceTime(res.position, res.Time.time) : null,
           status: res.status
         };
       });
@@ -524,7 +530,7 @@ function simulateRound(round) {
       teamId: driverObj.team,
       points: pts,
       fastestLap: isFl,
-      time: isDnf ? status : (posStr === "1" ? "1:28:44.212" : `+${(index * 2.1).toFixed(3)}s`),
+      time: isDnf ? null : (posStr === "1" ? "1:28:44.212" : `+${(index * 2.1).toFixed(3)}s`),
       status: status
     });
   });
@@ -863,8 +869,8 @@ function renderGeneralStandings(container) {
             <span>${team.name}</span>
           </div>
         </td>
-        <td style="text-align: center; font-family: var(--font);">${item.wins}</td>
-        <td style="text-align: center; font-family: var(--font);">${item.podiums}</td>
+        <td class="num-cell">${item.wins}</td>
+        <td class="num-cell">${item.podiums}</td>
         <td style="text-align: right;" class="pts">${item.points}</td>
       </tr>
     `;
@@ -883,8 +889,8 @@ function renderGeneralStandings(container) {
             <strong>${team.name}</strong>
           </div>
         </td>
-        <td style="text-align: center; font-family: var(--font);">${item.wins}</td>
-        <td style="text-align: center; font-family: var(--font);">${item.podiums || 0}</td>
+        <td class="num-cell">${item.wins}</td>
+        <td class="num-cell">${item.podiums || 0}</td>
         <td style="text-align: right;" class="pts">${item.points}</td>
       </tr>
     `;
@@ -1128,7 +1134,7 @@ function renderRaceResults(container, race) {
             const d = DRIVERS[res.driverId] || { flag: '🏳️', name: res.driverName, team: res.teamId };
             const team = TEAMS[res.teamId] || { name: res.teamId, color: '#FFFFFF' };
             const posClass = idx === 0 ? 'p1' : idx === 1 ? 'p2' : idx === 2 ? 'p3' : 'pN';
-            const statusClass = isClassifiedFinish(res.status) ? 'status-fin' : (res.status === 'DSQ' || res.status === 'Disqualified' ? 'status-dsq' : 'status-dnf');
+            const timeText = formatResultTime(res.time, res.status);
             const statusLabelClass = getStatusLabelClass(res.status);
             
             const posChangeHtml = getPosChangeHtml(res);
@@ -1136,7 +1142,7 @@ function renderRaceResults(container, race) {
             return `
               <tr>
                 <td><span class="pos-badge ${posClass}">${res.position}</span></td>
-                <td style="text-align: center; font-family: var(--font); font-weight: 600; color: var(--text2);">${res.grid || '—'}</td>
+                <td class="num-cell">${res.grid || '—'}</td>
                 <td>
                   <div style="display:flex; align-items:center; gap:8px;">
                     <span class="flag-sm">${d.flag}</span>
@@ -1149,7 +1155,7 @@ function renderRaceResults(container, race) {
                     <span>${team.name}</span>
                   </div>
                 </td>
-                <td class="${statusClass}">${formatResultTime(res.time, res.status)}</td>
+                <td class="time-cell">${timeText}</td>
                 <td style="text-align: center;"><span class="status-label ${statusLabelClass}">${formatStatusLabel(res.status)}</span></td>
                 <td style="text-align: center;">${posChangeHtml}</td>
                 <td style="text-align: center;">
@@ -1375,9 +1381,9 @@ function renderTeamComparison(container, teamId) {
                   return `
                     <tr>
                       <td>R${item.round}: ${item.raceName}</td>
-                      <td style="text-align:center; font-weight:${d1WinsMatch ? 'bold' : 'normal'}; color:${d1WinsMatch ? team.color : 'inherit'}">${item.d1Pos}</td>
+                      <td class="num-cell${d1WinsMatch ? ' is-best' : ''}" style="color:${d1WinsMatch ? team.color : 'inherit'}">${item.d1Pos}</td>
                       <td style="text-align:center;"><span class="status-label ${getStatusLabelClass(item.d1Status)}">${formatStatusLabel(item.d1Status)}</span></td>
-                      <td style="text-align:center; font-weight:${d2WinsMatch ? 'bold' : 'normal'}; color:${d2WinsMatch ? team.color : 'inherit'}">${item.d2Pos}</td>
+                      <td class="num-cell${d2WinsMatch ? ' is-best' : ''}" style="color:${d2WinsMatch ? team.color : 'inherit'}">${item.d2Pos}</td>
                       <td style="text-align:center;"><span class="status-label ${getStatusLabelClass(item.d2Status)}">${formatStatusLabel(item.d2Status)}</span></td>
                       <td style="text-align:right;">
                         ${d1WinsMatch 
@@ -1712,7 +1718,7 @@ function renderMixedFilters(container) {
             <div style="width:60px;height:60px;flex-shrink:0;">${getDriverHelmetSVG(res.driverId, team.color)}</div>
             <div>
               <div style="font-size:10px;color:var(--text3);font-weight:700;letter-spacing:1px;">${d.flag} ${d.nationality || ''}</div>
-              <div style="font-family:var(--font);font-size:18px;font-weight:900;">${d.name}</div>
+              <div style="font-size:18px;font-weight:700;">${d.name}</div>
               <div style="font-size:11px;color:var(--text2);">Dorsal #${d.number}</div>
             </div>
             <div style="margin-left:auto;">
@@ -1724,8 +1730,8 @@ function renderMixedFilters(container) {
             <div class="cstat"><span class="cic-val">${res.grid || '?'}</span><span class="cic-key">Salida</span></div>
             <div class="cstat" style="align-items:center;">${changeHtml || '<span style="color:var(--text3)">—</span>'}<span class="cic-key" style="margin-top:4px;">Posic. +/-</span></div>
           </div>
-          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);">
-            ⏱️ ${formatResultTime(res.time, res.status)}
+          <div class="result-meta" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+            <span class="time-cell">⏱️ ${formatResultTimeOrStatus(res.time, res.status)}</span>
             ${res.fastestLap ? '<span class="compare-badge cb-win" style="font-size:9px;margin-left:6px;">⚡ Vuelta Rápida</span>' : ''}
           </div>
         </div>
@@ -1764,6 +1770,9 @@ function renderMixedFilters(container) {
 
     if (driverRes) {
       const posClass = driverRes.position === "1" ? "p1" : driverRes.position === "2" ? "p2" : driverRes.position === "3" ? "p3" : "pN";
+      const timeText = formatResultTime(driverRes.time, driverRes.status);
+      const statusLabelClass = getStatusLabelClass(driverRes.status);
+      const statusHtml = `<span class="status-label ${statusLabelClass}">${formatStatusLabel(driverRes.status)}</span>`;
       detailsHtml = `
         <div class="g2 mb24">
           <div class="card">
@@ -1775,8 +1784,10 @@ function renderMixedFilters(container) {
             <div style="display:flex; flex-direction:column; gap:16px; align-items:center; justify-content:center; min-height:180px;">
               <span class="pos-badge ${posClass}" style="width:72px; height:72px; font-size:26px;">${driverRes.position}</span>
               <div style="text-align:center;">
-                <div style="font-family:var(--font); font-size:20px; font-weight:800;">${driverRes.time}</div>
-                <div style="color:var(--text2); margin-top:4px;">Estado: <strong>${formatStatusLabel(driverRes.status)}</strong></div>
+                ${timeText !== '—'
+                  ? `<div class="result-hero-time">${timeText}</div><div class="result-hero-status">${statusHtml}</div>`
+                  : `<div class="result-hero-status solo">${statusHtml}</div>`
+                }
               </div>
             </div>
           </div>

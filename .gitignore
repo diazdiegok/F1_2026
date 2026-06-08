@@ -2,3 +2,5 @@
 Thumbs.db
 *.log
 _api_*.json
+node_modules/
+package-lock.json
