@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F1 2026 — Tablero de Temporada</title>
+<meta name="description" content="Tablero interactivo de la temporada F1 2026. Campeonato de pilotos y constructores con estadísticas en tiempo real.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">
+        <img src="logos/f1-logo.svg" alt="Formula 1" class="f1-brand-logo" width="40" height="40" />
+      </div>
+      <div>
+        <div class="logo-title">F1 <span>2026</span></div>
+        <div class="logo-sub">TABLERO DE TEMPORADA</div>
+      </div>
+    </div>
+    <div class="header-center" id="headerBreadcrumb">
+      <span class="breadcrumb-item active">Campeonato General</span>
+    </div>
+    <div class="header-right">
+      <button class="btn-refresh" id="btnRefresh" onclick="refreshData()" title="Actualizar datos de la API">↻ Actualizar</button>
+      <div class="live-badge"><span class="dot"></span> TEMPORADA EN CURSO</div>
+      <div class="season-info" id="seasonInfo">Ronda <strong id="currentRound">—</strong> / <strong id="totalRounds">—</strong></div>
+    </div>
+  </div>
+</header>
+
+<div class="filters-bar">
+  <div class="filters-inner">
+    <div class="filter-group">
+      <label class="filter-label">🏁 Carrera / Gran Premio</label>
+      <select class="filter-select" id="filterRace">
+        <option value="all">Todas las Carreras</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">🏭 Equipo / Escudería</label>
+      <select class="filter-select" id="filterTeam">
+        <option value="all">Todos los Equipos</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">🪖 Piloto</label>
+      <select class="filter-select" id="filterDriver">
+        <option value="all">Todos los Pilotos</option>
+      </select>
+    </div>
+    <button class="btn-reset" id="btnReset" onclick="resetFilters()">↺ Reset</button>
+  </div>
+</div>
+
+<main id="mainContent">
+  <div class="loading-container" id="loadingScreen">
+    <div class="spinner"></div>
+    <div class="loading-text">CARGANDO DATOS F1 2026...</div>
+  </div>
+</main>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" role="img" aria-label="Cadillac">
+  <path d="M28 8 L100 4 L172 8 L168 52 L100 56 L32 52 Z" fill="#0B1F3A" stroke="#C9A227" stroke-width="2"/>
+  <path d="M52 18 L100 14 L148 18 L145 44 L100 48 L55 44 Z" fill="#C9A227"/>
+  <text x="100" y="36" font-family="Georgia, serif" font-weight="700" font-size="11" fill="#0B1F3A" text-anchor="middle" letter-spacing="1">CADILLAC</text>
+</svg>
