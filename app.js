@@ -1122,7 +1122,7 @@ function renderRaceResults(container, race) {
             <th style="width: 50px; text-align: center;">Grid</th>
             <th>Piloto</th>
             <th>Escudería</th>
-            <th>Tiempo / Dif</th>
+            <th style="text-align: center;">Tiempo / Dif</th>
             <th style="text-align: center;">Estado</th>
             <th style="text-align: center;">Puestos +/-</th>
             <th style="text-align: center;">Vuelta Rápida</th>
