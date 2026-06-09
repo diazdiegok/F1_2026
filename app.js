@@ -14,9 +14,10 @@ const STATE = {
   }
 };
 
-// ─── OVERRIDES FOR LATEST RACES NOT YET IN API ──────────────────────────────
+// Resultados manuales solo para MOSTRAR una carrera que la API aún no publicó.
+// No modifican el campeonato: los puntos siempre vienen de la API oficial.
 const OVERRIDE_RESULTS = {
-  6: { // Round 6: Monaco
+  6: { // Round 6: Monaco (visual hasta que la API lo cargue)
     results: [
       { position: "1", posNumber: 1, grid: 1, driverId: "antonelli", driverName: "Kimi Antonelli", driverShort: "ANT", teamId: "mercedes", points: 26, fastestLap: true, time: "1:44:21.312", status: "Finished" },
       { position: "2", posNumber: 2, grid: 2, driverId: "hamilton", driverName: "Lewis Hamilton", driverShort: "HAM", teamId: "ferrari", points: 18, fastestLap: false, time: "+6.271s", status: "Finished" },
@@ -264,6 +265,14 @@ function formatResultTimeOrStatus(time, status) {
   return t === '—' ? formatStatusLabel(status) : t;
 }
 
+function getDriverStanding(driverId) {
+  return STANDINGS_CACHE.drivers.find(d => d.id === driverId) || null;
+}
+
+function getConstructorStanding(teamId) {
+  return STANDINGS_CACHE.constructors.find(c => c.id === teamId) || null;
+}
+
 // ─── DATA LOADING FROM JOLPICA API ──────────────────────────────────────────
 
 async function loadF1Data() {
@@ -453,7 +462,6 @@ async function loadF1Data() {
       });
     });
 
-    // If API standings was empty, calculate from cache
     if (STANDINGS_CACHE.drivers.length === 0) {
       calculateChampionshipStandings();
     }
@@ -1155,11 +1163,11 @@ function renderRaceResults(container, race) {
                     <span>${team.name}</span>
                   </div>
                 </td>
-                <td class="time-cell">${timeText}</td>
-                <td style="text-align: center;"><span class="status-label ${statusLabelClass}">${formatStatusLabel(res.status)}</span></td>
-                <td style="text-align: center;">${posChangeHtml}</td>
-                <td style="text-align: center;">
-                  ${res.fastestLap ? `<span class="compare-badge cb-win" style="font-size:9px; background:rgba(0,212,170,.15); color:var(--green); border-color:var(--green)">⏱️ MAV</span>` : `—`}
+                <td class="time-cell"><span class="time-val">${timeText}</span></td>
+                <td class="cell-center"><span class="status-label ${statusLabelClass}">${formatStatusLabel(res.status)}</span></td>
+                <td class="cell-center">${posChangeHtml}</td>
+                <td class="cell-center">
+                  ${res.fastestLap ? `<span class="compare-badge cb-win" style="font-size:9px; background:rgba(0,212,170,.15); color:var(--green); border-color:var(--green)">⏱️ MAV</span>` : `<span class="cell-dash">—</span>`}
                 </td>
                 <td style="text-align: right;" class="pts">${res.points > 0 ? `+${res.points}` : '0'}</td>
               </tr>
@@ -1197,63 +1205,64 @@ function renderTeamComparison(container, teamId) {
   const d2Id = driverIds[1];
   const d1 = DRIVERS[d1Id];
   const d2 = DRIVERS[d2Id];
+  const d1Standing = getDriverStanding(d1Id);
+  const d2Standing = getDriverStanding(d2Id);
+  const teamStanding = getConstructorStanding(teamId);
 
-  const completedRaces = RACES.filter(r => r.completed);
-  
-  let d1Pts = 0;
-  let d2Pts = 0;
-  let d1Wins = 0;
-  let d2Wins = 0;
-  let d1Podiums = 0;
-  let d2Podiums = 0;
-  let d1FL = 0;
-  let d2FL = 0;
+  const d1Pts = d1Standing?.points || 0;
+  const d2Pts = d2Standing?.points || 0;
+  const teamPts = teamStanding?.points ?? (d1Pts + d2Pts);
+  const d1Wins = d1Standing?.wins || 0;
+  const d2Wins = d2Standing?.wins || 0;
+  const d1Podiums = d1Standing?.podiums || 0;
+  const d2Podiums = d2Standing?.podiums || 0;
+  const d1FL = d1Standing?.fastestLaps || 0;
+  const d2FL = d2Standing?.fastestLaps || 0;
+
   let d1Finishes = 0;
   let d2Finishes = 0;
   let d1Ahead = 0;
   let d2Ahead = 0;
-
   const raceByRaceData = [];
 
+  const completedRaces = RACES.filter(r => r.completed);
   completedRaces.forEach(r => {
     const raceResults = RESULTS_CACHE[r.round]?.results || [];
     const r1 = raceResults.find(x => x.driverId === d1Id);
     const r2 = raceResults.find(x => x.driverId === d2Id);
+    if (!r1 && !r2) return;
+
+    if (r1 && isClassifiedFinish(r1.status)) d1Finishes++;
+    if (r2 && isClassifiedFinish(r2.status)) d2Finishes++;
 
     if (r1 && r2) {
-      d1Pts += r1.points;
-      d2Pts += r2.points;
-      
-      if (r1.position === "1") d1Wins++;
-      if (r2.position === "1") d2Wins++;
-      
-      if (["1","2","3"].includes(r1.position)) d1Podiums++;
-      if (["1","2","3"].includes(r2.position)) d2Podiums++;
-      
-      if (r1.fastestLap) d1FL++;
-      if (r2.fastestLap) d2FL++;
-
-      if (isClassifiedFinish(r1.status)) d1Finishes++;
-      if (isClassifiedFinish(r2.status)) d2Finishes++;
-
       const p1Num = r1.posNumber;
       const p2Num = r2.posNumber;
       if (p1Num < p2Num) d1Ahead++;
       else if (p2Num < p1Num) d2Ahead++;
-
-      raceByRaceData.push({
-        round: r.round,
-        raceName: r.raceName,
-        d1Pos: r1.position,
-        d2Pos: r2.position,
-        d1Status: r1.status,
-        d2Status: r2.status,
-        d1Pts: r1.points,
-        d2Pts: r2.points,
-        d1PtsAccum: d1Pts,
-        d2PtsAccum: d2Pts
-      });
     }
+
+    raceByRaceData.push({
+      round: r.round,
+      raceName: r.raceName,
+      d1Pos: r1?.position || '—',
+      d2Pos: r2?.position || '—',
+      d1Status: r1?.status || '—',
+      d2Status: r2?.status || '—',
+      d1Pts: r1?.points || 0,
+      d2Pts: r2?.points || 0,
+    });
+  });
+
+  let d1Accum = 0;
+  let d2Accum = 0;
+  const d1Evolution = raceByRaceData.map(item => {
+    d1Accum += item.d1Pts;
+    return d1Accum;
+  });
+  const d2Evolution = raceByRaceData.map(item => {
+    d2Accum += item.d2Pts;
+    return d2Accum;
   });
 
   const renderStatRow = (label, v1, v2) => {
@@ -1279,27 +1288,34 @@ function renderTeamComparison(container, teamId) {
     `;
   };
 
+  const carUrl = getTeamCarImageUrl(teamId);
+
   wrap.innerHTML = `
-    <div class="card mb24" style="background:${team.bg}; border-color:${team.color}50">
-      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
-        <div style="display:flex; align-items:center; gap:20px;">
-          <div style="width:60px; height:60px; display:flex; align-items:center; justify-content:center; fill:${team.color}; flex-shrink:0;">
-            ${getTeamLogoSVG(teamId, team.color)}
-          </div>
-          <div>
-            <span class="card-label" style="color:${team.color}; font-weight:800;">ESCUDERÍA CONFIRMADA F1 2026</span>
-            <h1 style="font-family:var(--font); font-weight:900; font-size:32px; margin:0;">${team.name}</h1>
-            <div style="display:flex; flex-wrap:wrap; gap:16px; margin-top:8px; font-size:12px; color:var(--text2);">
-              ${team.principal ? `<div>💼 Director: <strong style="color:var(--text)">${team.principal}</strong></div>` : ''}
-              ${team.base ? `<div>📍 Base: <strong style="color:var(--text)">${team.base}</strong></div>` : ''}
-              ${team.chassis ? `<div>🏎️ Chasis: <strong style="color:var(--text)">${team.chassis}</strong></div>` : ''}
-              ${team.engine ? `<div>⚙️ Motor: <strong style="color:var(--text)">${team.engine}</strong></div>` : ''}
+    <div class="card mb24 team-hero-card" style="background:${team.bg}; border-color:${team.color}50;--team-color:${team.color}">
+      <div class="team-hero-grid">
+        <div class="team-hero-top">
+          <div class="team-hero-info">
+            <div class="team-hero-logo">${getTeamLogoSVG(teamId, team.color)}</div>
+            <div>
+              <span class="card-label" style="color:${team.color}; font-weight:800;">ESCUDERÍA CONFIRMADA F1 2026</span>
+              <h1 class="team-hero-name">${team.name}</h1>
+              <div class="team-hero-meta">
+                ${team.principal ? `<span>💼 <strong>${team.principal}</strong></span>` : ''}
+                ${team.base ? `<span>📍 <strong>${team.base}</strong></span>` : ''}
+                ${team.chassis ? `<span>🏎️ <strong>${team.chassis}</strong></span>` : ''}
+                ${team.engine ? `<span>⚙️ <strong>${team.engine}</strong></span>` : ''}
+              </div>
             </div>
           </div>
+          <div class="team-hero-pts">
+            <span class="card-label">Puntos Combinados</span>
+            <div class="card-value" style="color:${team.color}">${teamPts} <span style="font-size:14px; color:var(--text2);">PTS</span></div>
+          </div>
         </div>
-        <div style="text-align:right;">
-          <span class="card-label">Puntos Combinados</span>
-          <div class="card-value" style="color:var(--text)">${d1Pts + d2Pts} <span style="font-size:14px; color:var(--text2);">PTS</span></div>
+        <div class="team-hero-car">
+          <div class="team-car-chip">${team.chassis} · <span>360°</span></div>
+          <div class="car360-inline" data-car360="${carUrl}" data-car-color="${team.color}"></div>
+          <div class="team-car-hint">↔ arrastra para rotar</div>
         </div>
       </div>
     </div>
@@ -1307,18 +1323,14 @@ function renderTeamComparison(container, teamId) {
     <div class="g12 mb24">
       <div class="h2h-wrap">
         <div class="h2h-top">
-          <div class="h2h-driver">
-            <div style="width:72px; height:72px; display:flex; align-items:center; justify-content:center;">
-              ${getDriverHelmetSVG(d1Id, team.color)}
-            </div>
+          <div class="h2h-driver" style="cursor:pointer" onclick="viewDriver('${d1Id}')">
+            <div class="h2h-portrait">${getDriverPortraitHtml(d1Id, team.color, 'sm')}</div>
             <div class="h2h-dname" style="margin-top:6px;">${d1.name}</div>
             <span class="h2h-dnum">#${d1.number}</span>
           </div>
           <div class="h2h-vs">VS</div>
-          <div class="h2h-driver">
-            <div style="width:72px; height:72px; display:flex; align-items:center; justify-content:center;">
-              ${getDriverHelmetSVG(d2Id, team.color)}
-            </div>
+          <div class="h2h-driver" style="cursor:pointer" onclick="viewDriver('${d2Id}')">
+            <div class="h2h-portrait">${getDriverPortraitHtml(d2Id, team.color, 'sm')}</div>
             <div class="h2h-dname" style="margin-top:6px;">${d2.name}</div>
             <span class="h2h-dnum">#${d2.number}</span>
           </div>
@@ -1403,11 +1415,12 @@ function renderTeamComparison(container, teamId) {
   `;
 
   container.appendChild(wrap);
+  initCar360Viewers();
 
   const ctx = document.getElementById('evolutionChart').getContext('2d');
   const labels = raceByRaceData.map(item => `R${item.round}`);
-  const d1Data = raceByRaceData.map(item => item.d1PtsAccum);
-  const d2Data = raceByRaceData.map(item => item.d2PtsAccum);
+  const d1Data = d1Evolution;
+  const d2Data = d2Evolution;
 
   if (STATE.charts.evolution) STATE.charts.evolution.destroy();
 
@@ -1504,43 +1517,11 @@ function renderDriverProfile(container, driverId) {
   }
 
   wrap.innerHTML = `
-    <div class="driver-hero mb24" style="background:linear-gradient(135deg, ${team.color}15, var(--bg3)); border-color:${team.color}40; position:relative;">
-      <div class="driver-num-bg">${d.number}</div>
-      
-      <div style="display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin-bottom:20px;">
-        <div style="width:85px; height:85px; flex-shrink:0;">
-          ${getDriverHelmetSVG(driverId, team.color)}
-        </div>
-        <div style="z-index:1;">
-          <div style="font-size:24px; line-height:1; margin-bottom:4px;">${d.flag}</div>
-          <h1 class="driver-name" style="margin:0;">${d.name}</h1>
-          <div class="driver-nat" style="margin-top:4px;">${d.nationality} | Escudería ${team.name}</div>
-          <div class="driver-team-pill" style="margin-top:8px;">
-            ${getTeamLogoInline(d.team)}
-            <span>Piloto #${d.number}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="driver-info-grid">
-        <div class="dinfo">
-          <div class="dinfo-label">Posición Mundial</div>
-          <div class="dinfo-value accent" style="color:var(--accent);">${position > 0 ? `${position}º` : '—'}</div>
-        </div>
-        <div class="dinfo">
-          <div class="dinfo-label">Puntos Totales</div>
-          <div class="dinfo-value">${points} <span style="font-size:10px; font-weight:normal; color:var(--text2)">PTS</span></div>
-        </div>
-        <div class="dinfo">
-          <div class="dinfo-label">Edad Actual</div>
-          <div class="dinfo-value">${d.age()} años</div>
-        </div>
-        <div class="dinfo">
-          <div class="dinfo-label">Mejor Resultado '26</div>
-          <div class="dinfo-value green">${bestResultThisSeason}</div>
-        </div>
-      </div>
-    </div>
+    ${getDriverProCard(driverId, {
+      position: position > 0 ? `${position}º` : '—',
+      points,
+      best: bestResultThisSeason,
+    })}
 
     <div class="g2 mb24">
       <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; gap:20px;">

@@ -120,6 +120,175 @@ const TEAM_LOGOS = {
   haas:         'logos/teams/haas.png',
 };
 
+// Renders oficiales 2026 de F1.com (librea correcta, fondo transparente, sin marca de agua)
+const F1_CAR_2026 = 'https://media.formula1.com/image/upload/c_lfill,w_3840,q_auto:good/v1740000001/common/f1/2026';
+
+const TEAM_CAR_SLUG = {
+  red_bull: 'redbullracing', mercedes: 'mercedes', ferrari: 'ferrari', mclaren: 'mclaren',
+  aston_martin: 'astonmartin', alpine: 'alpine', williams: 'williams', rb: 'racingbulls',
+  audi: 'audi', cadillac: 'cadillac', haas: 'haasf1team',
+};
+
+// Sin overrides locales: todos los equipos usan el render oficial 2026.
+const TEAM_CAR_LOCAL = {};
+
+function commonsFile(name) {
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(name)}`;
+}
+
+// Retratos oficiales 2026 — recorte CDN cintura arriba (g_north) para todos los pilotos
+const F1_DRIVER_CROP = {
+  lg: { w: 1200, h: 720 },
+  sm: { w: 600, h: 600 },
+};
+
+const F1_DRIVER_TEAM_SLUG = {
+  red_bull: 'redbullracing', mercedes: 'mercedes', ferrari: 'ferrari', mclaren: 'mclaren',
+  aston_martin: 'astonmartin', alpine: 'alpine', williams: 'williams', rb: 'racingbulls',
+  audi: 'audi', cadillac: 'cadillac', haas: 'haasf1team',
+};
+
+const F1_DRIVER_CODES = {
+  max_verstappen: 'maxver01', hadjar: 'isahad01', russell: 'georus01', antonelli: 'andant01',
+  leclerc: 'chalec01', hamilton: 'lewham01', norris: 'lannor01', piastri: 'oscpia01',
+  alonso: 'feralo01', stroll: 'lanstr01', gasly: 'piegas01', colapinto: 'fracol01',
+  lawson: 'lialaw01', arvid_lindblad: 'arvlin01', ocon: 'estoco01', bearman: 'olibea01',
+  sainz: 'carsai01', albon: 'alealb01', hulkenberg: 'nichul01', bortoleto: 'gabbor01',
+  perez: 'serper01', bottas: 'valbot01',
+};
+
+function getDriverPortraitUrl(driverId, size = 'lg') {
+  const code = F1_DRIVER_CODES[driverId];
+  const team = F1_DRIVER_TEAM_SLUG[DRIVERS[driverId]?.team];
+  if (!code || !team) return null;
+  const { w, h } = F1_DRIVER_CROP[size] || F1_DRIVER_CROP.lg;
+  const base = `https://media.formula1.com/image/upload/c_fill,w_${w},h_${h},g_north/q_auto:good/v1740000001/common/f1/2026`;
+  return `${base}/${team}/${code}/2026${team}${code}right.webp`;
+}
+
+function getDriverPortraitMeta(driverId, size = 'lg') {
+  const url = getDriverPortraitUrl(driverId, size);
+  if (!url) return null;
+  return { url, fallback: null, official: true, pos: 'center top' };
+}
+
+function getTeamCarImageUrl(teamId) {
+  if (TEAM_CAR_LOCAL[teamId]) return TEAM_CAR_LOCAL[teamId];
+  const slug = TEAM_CAR_SLUG[teamId] || 'redbullracing';
+  return `${F1_CAR_2026}/${slug}/2026${slug}carright.webp`;
+}
+
+function getTeamCarThumbUrl(teamId) {
+  if (TEAM_CAR_LOCAL[teamId]) return TEAM_CAR_LOCAL[teamId];
+  const slug = TEAM_CAR_SLUG[teamId] || 'redbullracing';
+  return `https://media.formula1.com/image/upload/c_fit,w_720,h_320,q_auto:good/v1740000001/common/f1/2026/${slug}/2026${slug}carright.webp`;
+}
+
+function getDriverPortrait(driverId) {
+  return getDriverPortraitMeta(driverId)?.url || null;
+}
+
+function portraitImgHtml(meta, driverId, size, teamColor) {
+  const name = DRIVERS[driverId]?.name || driverId;
+  const fbId = size === 'sm' ? `portrait-sm-${driverId}` : `face-fb-${driverId}`;
+  const onErr = size === 'sm'
+    ? `onerror="this.style.display='none';document.getElementById('${fbId}').style.display='flex';"`
+    : `onerror="this.classList.add('is-hidden');document.getElementById('${fbId}').classList.add('is-visible');"`;
+
+  const fbAttr = meta.fallback ? ` data-fallback="${meta.fallback}" onerror="if(this.dataset.fallback&&!this.dataset.fallbackUsed){this.dataset.fallbackUsed=1;this.src=this.dataset.fallback}else{${size === 'sm' ? `this.style.display='none';document.getElementById('${fbId}').style.display='flex'` : `this.classList.add('is-hidden');document.getElementById('${fbId}').classList.add('is-visible')`}}"` : onErr;
+
+  if (meta.official) {
+    const cls = size === 'sm' ? 'driver-portrait-img sm is-f1-official' : 'dpc-face-img is-f1-official';
+    const img = `<img src="${meta.url}" alt="${name}" class="${cls}" referrerpolicy="no-referrer" loading="eager" ${fbAttr} />`;
+    return size === 'sm' ? img : `<div class="dpc-face-studio">${img}</div>`;
+  }
+
+  const cls = size === 'sm' ? 'driver-portrait-img sm is-studio-photo' : 'dpc-face-img is-studio-photo';
+  const img = `<img src="${meta.url}" alt="${name}" class="${cls}" style="object-position:${meta.pos}" referrerpolicy="no-referrer" loading="eager" ${fbAttr} />`;
+  return size === 'sm' ? img : `<div class="dpc-face-studio">${img}</div>`;
+}
+
+function getDriverFaceHtml(driverId, teamColor) {
+  const meta = getDriverPortraitMeta(driverId, 'lg');
+  const name = DRIVERS[driverId]?.name || driverId;
+  const fbId = `face-fb-${driverId}`;
+  if (meta) {
+    return `
+      ${portraitImgHtml(meta, driverId, 'lg', teamColor)}
+      <div id="${fbId}" class="dpc-face-fallback">
+        <span class="dpc-face-initials">${DRIVERS[driverId]?.short || 'F1'}</span>
+        <span class="dpc-face-fb-label">${name.split(' ').pop()}</span>
+      </div>`;
+  }
+  return `<div class="dpc-face-fallback is-visible">
+    <span class="dpc-face-initials">${DRIVERS[driverId]?.short || 'F1'}</span>
+    <span class="dpc-face-fb-label">${name.split(' ').pop()}</span>
+  </div>`;
+}
+
+function getDriverPortraitHtml(driverId, teamColor, size = 'lg') {
+  if (size === 'sm') {
+    const meta = getDriverPortraitMeta(driverId, 'sm');
+    const fbId = `portrait-sm-${driverId}`;
+    if (meta) {
+      return `${portraitImgHtml(meta, driverId, 'sm', teamColor)}
+        <div id="${fbId}" class="driver-portrait-fallback sm" style="display:none;border-color:${teamColor}">
+          ${getDriverHelmetSVG(driverId, teamColor)}
+        </div>`;
+    }
+    return `<div class="driver-portrait-fallback sm" style="border-color:${teamColor}">${getDriverHelmetSVG(driverId, teamColor)}</div>`;
+  }
+  return getDriverFaceHtml(driverId, teamColor);
+}
+
+function getDriverProCard(driverId, stats = {}) {
+  const d = DRIVERS[driverId];
+  const team = TEAMS[d.team];
+  const carUrl = getTeamCarThumbUrl(d.team);
+  const { position = '—', points = 0, best = '—' } = stats;
+  return `
+    <div class="driver-pro-card mb24" style="--dpc-color:${team.color}">
+      <div class="dpc-bg-glow"></div>
+      <div class="dpc-visual-col">
+        <div class="dpc-season-tag">F1 2026</div>
+        <div class="dpc-face-area">${getDriverFaceHtml(driverId, team.color)}</div>
+        <div class="dpc-visual-footer">
+          <div class="dpc-number-badge" style="color:${team.color};border-color:${team.color}50;background:${team.color}12">
+            <span class="dpc-number-hash">#</span><span class="dpc-number-val">${d.number}</span>
+          </div>
+          <div class="dpc-helmet-side" style="border-color:${team.color}60" title="Casco ${team.name}">
+            <div class="dpc-helmet-inner">${getDriverHelmetSVG(driverId, team.color)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="dpc-main">
+        <div class="dpc-flag">${d.flag}</div>
+        <h1 class="dpc-name">${d.name}</h1>
+        <div class="dpc-sub">${d.nationality} · #${d.number} · ${team.name}</div>
+        <div class="dpc-team-pill">${getTeamLogoInline(d.team)} ${team.chassis} · ${team.engine}</div>
+        <div class="driver-info-grid dpc-stats">
+          <div class="dinfo"><div class="dinfo-label">Posición Mundial</div><div class="dinfo-value accent" style="color:var(--accent)">${position}</div></div>
+          <div class="dinfo"><div class="dinfo-label">Puntos</div><div class="dinfo-value">${points} <span style="font-size:10px;color:var(--text2)">PTS</span></div></div>
+          <div class="dinfo"><div class="dinfo-label">Edad</div><div class="dinfo-value">${d.age()} años</div></div>
+          <div class="dinfo"><div class="dinfo-label">Mejor '26</div><div class="dinfo-value green">${best}</div></div>
+        </div>
+      </div>
+      <div class="dpc-car-col">
+        <div class="dpc-car-block">
+          <div class="dpc-car-label">Monoplaza 2026</div>
+          <div class="dpc-car-thumb">
+            <img src="${carUrl}" alt="${team.chassis}" class="dpc-car-img"
+              onerror="this.style.opacity='0.3'" />
+          </div>
+          <div class="dpc-car-meta">
+            <div class="dpc-car-name">${team.chassis}</div>
+            <div class="dpc-car-team">${team.name}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
 const CIRCUIT_MAP_BASE = 'https://raw.githubusercontent.com/julesr0y/f1-circuits-svg/main/circuits/minimal/white-outline';
 
 function getTeamLogoFallback(teamId, color) {
