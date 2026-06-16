@@ -55,6 +55,28 @@ const OVERRIDE_RESULTS = {
       driverId: "antonelli",
       reason: "Dominio de principio a fin desde la pole position y quinta victoria consecutiva."
     }
+  },
+  7: { // Round 7: Barcelona — respaldo si falla la API por ronda
+    results: [
+      { position: "1", posNumber: 1, grid: 2, driverId: "hamilton", driverName: "Lewis Hamilton", driverShort: "HAM", teamId: "ferrari", points: 25, fastestLap: true, time: "1:32:28.105", status: "Finished" },
+      { position: "2", posNumber: 2, grid: 1, driverId: "russell", driverName: "George Russell", driverShort: "RUS", teamId: "mercedes", points: 18, fastestLap: false, time: "+19.561s", status: "Finished" },
+      { position: "3", posNumber: 3, grid: 4, driverId: "norris", driverName: "Lando Norris", driverShort: "NOR", teamId: "mclaren", points: 15, fastestLap: false, time: "+23.719s", status: "Finished" },
+      { position: "4", posNumber: 4, grid: 5, driverId: "max_verstappen", driverName: "Max Verstappen", driverShort: "VER", teamId: "red_bull", points: 12, fastestLap: false, time: "+40.497s", status: "Finished" },
+      { position: "5", posNumber: 5, grid: 7, driverId: "piastri", driverName: "Oscar Piastri", driverShort: "PIA", teamId: "mclaren", points: 10, fastestLap: false, time: "+58.661s", status: "Finished" },
+      { position: "6", posNumber: 6, grid: 6, driverId: "hadjar", driverName: "Isack Hadjar", driverShort: "HAD", teamId: "red_bull", points: 8, fastestLap: false, time: "+1 Lap", status: "Lapped" },
+      { position: "7", posNumber: 7, grid: 14, driverId: "gasly", driverName: "Pierre Gasly", driverShort: "GAS", teamId: "alpine", points: 6, fastestLap: false, time: "+1 Lap", status: "Lapped" },
+      { position: "8", posNumber: 8, grid: 8, driverId: "lawson", driverName: "Liam Lawson", driverShort: "LAW", teamId: "rb", points: 4, fastestLap: false, time: "+1 Lap", status: "Lapped" },
+      { position: "9", posNumber: 9, grid: 11, driverId: "arvid_lindblad", driverName: "Arvid Lindblad", driverShort: "LIN", teamId: "rb", points: 2, fastestLap: false, time: "+1 Lap", status: "Lapped" },
+      { position: "10", posNumber: 10, grid: 13, driverId: "colapinto", driverName: "Franco Colapinto", driverShort: "COL", teamId: "alpine", points: 1, fastestLap: false, time: "+1 Lap", status: "Lapped" },
+      { position: "NC", posNumber: 99, grid: 3, driverId: "antonelli", driverName: "Kimi Antonelli", driverShort: "ANT", teamId: "mercedes", points: 0, fastestLap: false, time: null, status: "Retired" },
+      { position: "NC", posNumber: 99, grid: 10, driverId: "leclerc", driverName: "Charles Leclerc", driverShort: "LEC", teamId: "ferrari", points: 0, fastestLap: false, time: null, status: "Retired" },
+    ],
+    fastestLap: { driverId: "hamilton", time: "1:20.122" },
+    penalties: [],
+    mvp: {
+      driverId: "hamilton",
+      reason: "Primera victoria con Ferrari en Barcelona; aprovechó el VSC para cortar la racha de Mercedes."
+    }
   }
 };
 
@@ -179,7 +201,10 @@ function syncRaceCompletion() {
   const now = new Date();
   RACES.forEach(r => {
     const raceEnd = new Date(r.date + 'T23:59:59');
-    r.completed = raceEnd < now || !!RESULTS_CACHE[r.round];
+    r.datePassed = raceEnd < now;
+    r.hasResults = !!RESULTS_CACHE[r.round];
+    r.pendingResults = r.datePassed && !r.hasResults;
+    r.completed = r.hasResults;
   });
 }
 
@@ -196,7 +221,6 @@ function getDataSourceBadge(dataSource, isPartial) {
   if (dataSource === 'api' && isPartial) return '<span class="data-badge partial">Datos parciales</span>';
   if (dataSource === 'api') return '<span class="data-badge official">Datos oficiales</span>';
   if (dataSource === 'override') return '<span class="data-badge manual">Datos manuales</span>';
-  if (dataSource === 'simulated') return '<span class="data-badge simulated">Simulado</span>';
   return '';
 }
 
@@ -275,6 +299,126 @@ function getConstructorStanding(teamId) {
 
 // ─── DATA LOADING FROM JOLPICA API ──────────────────────────────────────────
 
+function buildRaceCacheFromErgast(r, dataSource = 'api') {
+  const round = parseInt(r.round, 10);
+  let fastestLapDriverId = null;
+  let fastestLapTime = '—';
+  let minLapTimeMs = Infinity;
+
+  const results = (r.Results || []).map(res => {
+    const dId = res.Driver.driverId;
+    const tId = res.Constructor.constructorId === 'rb' ? 'rb' : res.Constructor.constructorId;
+    const flTime = res.FastestLap?.Time?.time;
+
+    if (flTime) {
+      const parts = flTime.split(/[:.]/);
+      let ms = 0;
+      if (parts.length === 3) {
+        ms = (parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10)) * 1000 + parseInt(parts[2], 10);
+      } else if (parts.length === 2) {
+        ms = parseInt(parts[0], 10) * 1000 + parseInt(parts[1], 10);
+      }
+      if (ms < minLapTimeMs) {
+        minLapTimeMs = ms;
+        fastestLapDriverId = dId;
+        fastestLapTime = flTime;
+      }
+    }
+
+    const position = formatPositionDisplay(res.positionText, res.position);
+
+    return {
+      position,
+      posNumber: getPosNumber(res.positionText, res.position),
+      grid: res.grid ? parseInt(res.grid, 10) : 20,
+      driverId: dId,
+      driverName: `${res.Driver.givenName} ${res.Driver.familyName}`,
+      driverShort: res.Driver.code || dId.slice(0, 3).toUpperCase(),
+      teamId: tId,
+      points: parseFloat(res.points),
+      fastestLap: false,
+      time: res.Time?.time ? formatRaceTime(res.position, res.Time.time) : null,
+      status: res.status
+    };
+  });
+
+  if (fastestLapDriverId) {
+    const flItem = results.find(x => x.driverId === fastestLapDriverId);
+    if (flItem) flItem.fastestLap = true;
+  }
+
+  const roundSeed = round * 100;
+  const mvpIndex = Math.floor(Math.abs(Math.sin(roundSeed)) * Math.min(results.length, 6));
+  const winnerId = results.find(x => x.position === '1')?.driverId;
+  const mvpDriverId = round === 7 && winnerId ? winnerId : (results[mvpIndex]?.driverId || winnerId || 'antonelli');
+  const mvpReason = round === 7
+    ? 'Primera victoria con Ferrari en Barcelona; aprovechó el VSC para cortar la racha de Mercedes.'
+    : [
+        'Estrategia de paradas y ritmo impecable bajo presión.',
+        'Defensa férrea contra ataques continuos durante las últimas 10 vueltas.',
+        'Gran consistencia de vueltas y gestión de neumáticos blandos.',
+        'Maniobras de adelantamiento espectaculares en las curvas rápidas.'
+      ][round % 4];
+
+  const penalties = [];
+  if (round % 2 === 0 && results.length > 10) {
+    penalties.push({
+      driverId: results[10].driverId,
+      desc: 'Límites de pista excedidos',
+      val: '+5s'
+    });
+  }
+
+  return tagRaceData({
+    results: results.sort((a, b) => a.posNumber - b.posNumber),
+    fastestLap: {
+      driverId: fastestLapDriverId || winnerId || 'antonelli',
+      time: fastestLapTime
+    },
+    penalties,
+    mvp: { driverId: mvpDriverId, reason: mvpReason },
+    dataSource
+  });
+}
+
+async function fetchErgastRoundResults(round) {
+  try {
+    const res = await fetch(`https://api.jolpi.ca/ergast/f1/2026/${round}/results.json`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const race = data?.MRData?.RaceTable?.Races?.[0];
+    if (!race?.Results?.length) return null;
+    return buildRaceCacheFromErgast(race, 'api');
+  } catch {
+    return null;
+  }
+}
+
+async function supplementMissingRoundResults() {
+  const passedRaces = RACES.filter(r => {
+    const raceEnd = new Date(r.date + 'T23:59:59');
+    return raceEnd < new Date();
+  });
+
+  for (const race of passedRaces) {
+    if (RESULTS_CACHE[race.round]) continue;
+
+    if (OVERRIDE_RESULTS[race.round]) {
+      RESULTS_CACHE[race.round] = tagRaceData({
+        ...OVERRIDE_RESULTS[race.round],
+        dataSource: 'override'
+      });
+      continue;
+    }
+
+    const fromApi = await fetchErgastRoundResults(race.round);
+    if (fromApi) {
+      RESULTS_CACHE[race.round] = fromApi;
+    }
+    // Sin datos oficiales: no inventamos resultados.
+  }
+}
+
 async function loadF1Data() {
   showLoading(true);
   
@@ -294,7 +438,6 @@ async function loadF1Data() {
         date: r.date,
         circuitId: r.Circuit.circuitId,
         circuitName: r.Circuit.circuitName,
-        completed: new Date(r.date + 'T23:59:59') < new Date()
       }));
     } else {
       generateMockCalendar();
@@ -315,107 +458,14 @@ async function loadF1Data() {
     const resultsData = resultsRes.ok ? await resultsRes.json() : null;
     const racesWithResults = resultsData?.MRData?.RaceTable?.Races || [];
 
-    // Map the results to our cache
     RESULTS_CACHE = {};
     racesWithResults.forEach(r => {
-      const round = parseInt(r.round);
-      
-      // Determine fastest lap of this race
-      let fastestLapDriverId = null;
-      let fastestLapTime = "—";
-      let minLapTimeMs = Infinity;
-
-      const results = r.Results.map(res => {
-        const dId = res.Driver.driverId;
-        const tId = res.Constructor.constructorId === 'rb' ? 'rb' : res.Constructor.constructorId;
-        
-        const flTime = res.FastestLap?.Time?.time;
-        if (flTime) {
-          const parts = flTime.split(/[:.]/);
-          let ms = 0;
-          if (parts.length === 3) {
-            ms = (parseInt(parts[0]) * 60 + parseInt(parts[1])) * 1000 + parseInt(parts[2]);
-          } else if (parts.length === 2) {
-            ms = parseInt(parts[0]) * 1000 + parseInt(parts[1]);
-          }
-          if (ms < minLapTimeMs) {
-            minLapTimeMs = ms;
-            fastestLapDriverId = dId;
-            fastestLapTime = flTime;
-          }
-        }
-
-        const position = formatPositionDisplay(res.positionText, res.position);
-
-        return {
-          position,
-          posNumber: getPosNumber(res.positionText, res.position),
-          grid: res.grid ? parseInt(res.grid) : 20,
-          driverId: dId,
-          driverName: `${res.Driver.givenName} ${res.Driver.familyName}`,
-          driverShort: res.Driver.code || dId.slice(0,3).toUpperCase(),
-          teamId: tId,
-          points: parseFloat(res.points),
-          fastestLap: false, // will update below
-          time: res.Time?.time ? formatRaceTime(res.position, res.Time.time) : null,
-          status: res.status
-        };
-      });
-
-      // Update fastest lap flag
-      if (fastestLapDriverId) {
-        const flItem = results.find(x => x.driverId === fastestLapDriverId);
-        if (flItem) flItem.fastestLap = true;
-      }
-
-      // Generate realistic MVP and penalty descriptions for this race based on results
-      const roundSeed = round * 100;
-      const mvpIndex = Math.floor(Math.abs(Math.sin(roundSeed)) * Math.min(results.length, 6));
-      const mvpDriverId = results[mvpIndex]?.driverId || 'antonelli';
-      const mvpReason = [
-        "Estrategia de paradas y ritmo impecable bajo presión.",
-        "Defensa férrea contra ataques continuos durante las últimas 10 vueltas.",
-        "Gran consistencia de vueltas y gestión de neumáticos neumáticos blandos.",
-        "Maniobras de adelantamiento espectaculares en las curvas rápidas."
-      ][round % 4];
-
-      const penalties = [];
-      if (round % 2 === 0 && results.length > 10) {
-        penalties.push({
-          driverId: results[10].driverId,
-          desc: "Límites de pista excedidos",
-          val: "+5s"
-        });
-      }
-
-      RESULTS_CACHE[round] = tagRaceData({
-        results: results.sort((a,b) => a.posNumber - b.posNumber),
-        fastestLap: {
-          driverId: fastestLapDriverId || results[0]?.driverId || 'antonelli',
-          time: fastestLapTime
-        },
-        penalties: penalties,
-        mvp: {
-          driverId: mvpDriverId,
-          reason: mvpReason
-        },
-        dataSource: 'api'
-      });
+      RESULTS_CACHE[parseInt(r.round, 10)] = buildRaceCacheFromErgast(r, 'api');
     });
 
     syncRaceCompletion();
-
-    // Supplement missing rounds only when API has no data at all
-    const completedRaces = RACES.filter(r => r.completed);
-    completedRaces.forEach(race => {
-      if (!RESULTS_CACHE[race.round]) {
-        if (OVERRIDE_RESULTS[race.round]) {
-          RESULTS_CACHE[race.round] = tagRaceData({ ...OVERRIDE_RESULTS[race.round], dataSource: 'override' });
-        } else {
-          simulateRound(race.round);
-        }
-      }
-    });
+    await supplementMissingRoundResults();
+    syncRaceCompletion();
 
     // Populate Standings cache from API
     STANDINGS_CACHE.drivers = [];
@@ -467,95 +517,16 @@ async function loadF1Data() {
     }
 
   } catch (error) {
-    console.warn("API Error, falling back to full simulation:", error);
+    console.warn('API Error, calendario local sin resultados inventados:', error);
+    RESULTS_CACHE = {};
+    STANDINGS_CACHE = { drivers: [], constructors: [] };
     generateMockCalendar();
-    generateRealisticResults();
     syncRaceCompletion();
   }
   
   populateDropdowns();
   showLoading(false);
   updateDashboard();
-}
-
-function simulateRound(round) {
-  const roundSeed = round * 100;
-  const ptsSystem = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
-  
-  const perf = {
-    antonelli: 9.8, hamilton: 9.3, russell: 9.2, leclerc: 9.2, piastri: 9.0,
-    norris: 8.9, max_verstappen: 8.8, hadjar: 8.0, lawson: 7.9, gasly: 7.8,
-    bearman: 7.7, colapinto: 7.8, arvid_lindblad: 7.4, sainz: 8.3, albon: 8.1,
-    ocon: 7.5, bortoleto: 7.4, alonso: 8.2, hulkenberg: 7.3, bottas: 7.2,
-    perez: 7.2, stroll: 7.0
-  };
-
-  const raceDrivers = Object.keys(DRIVERS).map(id => {
-    const noise = Math.sin(roundSeed + id.charCodeAt(0) * 12) * 2.5;
-    const score = (perf[id] || 7.0) * 5 + noise;
-    return { id, score };
-  });
-
-  raceDrivers.sort((a, b) => b.score - a.score);
-
-  const dnfCount = Math.floor(Math.abs(Math.sin(roundSeed)) * 3) + 1;
-  const dnfIndices = [18, 19, 20]; // tail
-
-  const results = [];
-  let position = 1;
-  const flDriverId = raceDrivers[0].id;
-
-  raceDrivers.forEach((item, index) => {
-    const isDnf = dnfIndices.includes(index);
-    const driverObj = DRIVERS[item.id] || { name: item.id, short: item.id.slice(0,3).toUpperCase(), team: 'williams', flag: '🏳️' };
-    const isFl = item.id === flDriverId;
-
-    let pts = 0;
-    let posStr = "";
-    let status = "Finished";
-
-    if (isDnf) {
-      status = "DNF";
-      posStr = "NC";
-    } else {
-      posStr = position.toString();
-      if (position <= 10) {
-        pts = ptsSystem[position - 1];
-        if (isFl) pts += 1;
-      }
-      position++;
-    }
-
-    const gridVal = Math.max(1, Math.min(22, index + 1 + Math.floor(Math.sin(roundSeed + index) * 3)));
-
-    results.push({
-      position: posStr,
-      posNumber: isDnf ? 99 : parseInt(posStr),
-      grid: gridVal,
-      driverId: item.id,
-      driverName: driverObj.name,
-      driverShort: driverObj.short,
-      teamId: driverObj.team,
-      points: pts,
-      fastestLap: isFl,
-      time: isDnf ? null : (posStr === "1" ? "1:28:44.212" : `+${(index * 2.1).toFixed(3)}s`),
-      status: status
-    });
-  });
-
-  RESULTS_CACHE[round] = tagRaceData({
-    results: results.sort((a,b) => a.posNumber - b.posNumber),
-    fastestLap: {
-      driverId: flDriverId,
-      time: "1:21.844"
-    },
-    penalties: [],
-    mvp: {
-      driverId: flDriverId,
-      reason: "Dominio absoluto desde la pole position."
-    },
-    dataSource: 'simulated'
-  });
 }
 
 function generateMockCalendar() {
@@ -580,17 +551,9 @@ function generateMockCalendar() {
     date: c.date,
     circuitId: c.id,
     circuitName: c.name.replace("GP de ", "Circuito de "),
-    completed: new Date(c.date + 'T23:59:59') < new Date()
+    completed: false
   }));
-}
-
-function generateRealisticResults() {
-  RESULTS_CACHE = {};
-  const completedRaces = RACES.filter(r => r.completed);
-  completedRaces.forEach(race => {
-    simulateRound(race.round);
-  });
-  calculateChampionshipStandings();
+  syncRaceCompletion();
 }
 
 function calculateChampionshipStandings() {
@@ -653,7 +616,9 @@ function populateDropdowns() {
 
   raceSelect.innerHTML = '<option value="all">Todas las Carreras</option>';
   RACES.forEach(r => {
-    const statusText = r.completed ? "✓" : "⏰";
+    let statusText = '⏰';
+    if (r.hasResults) statusText = '✓';
+    else if (r.pendingResults) statusText = '…';
     raceSelect.innerHTML += `<option value="${r.round}">${statusText} Rd ${r.round}: ${r.raceName}</option>`;
   });
 
@@ -823,7 +788,7 @@ function renderGeneralStandings(container) {
             <tbody>
               ${RACES.map(r => {
                 let statusBadge = '';
-                if (r.completed) {
+                if (r.hasResults) {
                   const raceData = RESULTS_CACHE[r.round];
                   const winnerId = raceData?.results[0]?.driverId;
                   const winnerDriver = DRIVERS[winnerId];
@@ -832,10 +797,12 @@ function renderGeneralStandings(container) {
                   } else {
                     statusBadge = `<span class="compare-badge cb-win" style="font-size:10px;">Finalizado</span>`;
                   }
+                } else if (r.pendingResults) {
+                  statusBadge = `<span class="compare-badge cb-lose" style="font-size:10px;">Resultados pendientes</span>`;
                 } else {
                   statusBadge = `<span class="compare-badge cb-lose" style="font-size:10px;">${r.date.split('-').reverse().slice(0,2).join('/')}</span>`;
                 }
-                const clickAttr = r.completed ? `class="cal-row-click" onclick="viewRace(${r.round})" title="Ver resultados del GP"` : '';
+                const clickAttr = r.hasResults ? `class="cal-row-click" onclick="viewRace(${r.round})" title="Ver resultados del GP"` : '';
                 return `
                   <tr ${clickAttr}>
                     <td style="width: 40px; color: var(--text3); font-weight:700;">R${r.round}</td>
@@ -1005,13 +972,16 @@ function renderRaceResults(container, race) {
   wrap.className = 'fade-in';
   
   const raceData = RESULTS_CACHE[race.round];
-  
-  if (!race.completed || !raceData) {
+
+  if (!raceData) {
+    const isPending = race.pendingResults || new Date(race.date + 'T23:59:59') < new Date();
     wrap.innerHTML = `
       <div class="card" style="text-align:center; padding:60px 20px;">
-        <span style="font-size: 52px; display:block; margin-bottom:16px;">⏰</span>
-        <h2 style="font-family:var(--font); font-weight:800; margin-bottom:8px;">ESTA CARRERA AÚN NO SE HA DISPUTADO</h2>
-        <p style="color:var(--text2); font-size:14px; max-width:500px; margin:0 auto;">El Gran Premio está programado para el <strong>${race.date.split('-').reverse().join('/')}</strong> en el ${race.circuitName}. Vuelve después del fin de semana de carrera para ver los resultados.</p>
+        <span style="font-size: 52px; display:block; margin-bottom:16px;">${isPending ? '📡' : '⏰'}</span>
+        <h2 style="font-family:var(--font); font-weight:800; margin-bottom:8px;">${isPending ? 'RESULTADOS OFICIALES PENDIENTES' : 'ESTA CARRERA AÚN NO SE HA DISPUTADO'}</h2>
+        <p style="color:var(--text2); font-size:14px; max-width:520px; margin:0 auto;">${isPending
+          ? `El GP ya se corrió (<strong>${race.date.split('-').reverse().join('/')}</strong>), pero la API aún no publicó la clasificación completa. Usá <strong>Actualizar</strong> más tarde; no mostramos resultados inventados.`
+          : `El Gran Premio está programado para el <strong>${race.date.split('-').reverse().join('/')}</strong> en el ${race.circuitName}.`}</p>
       </div>
     `;
     container.appendChild(wrap);
